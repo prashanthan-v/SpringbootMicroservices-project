@@ -1,0 +1,205 @@
+version: "3.8"
+services:
+#  mysql for order-service
+     mysql-order:
+        container_name: mysql-order
+        image: "mysql:5.7"
+
+        environment:
+          MYSQL_USER: order
+          MYSQL_PASSWORD: 1000
+          MYSQL_DATABASE: New_Order_Service
+          MYSQL_ROOT_USERNAME: root
+          MYSQL_ROOT_PASSWORD: 1224
+        volumes:
+          - ./mysql-order:/var/lib/mysql
+
+        ports:
+          - "3306:3307"
+        expose:
+          - "3306"
+
+        restart: unless-stopped
+#        for inventory-service
+     mysql-inventory:
+       container_name: mysql-inventory
+       image: "mysql:5.7"
+
+       environment:
+         MYSQL_USER: inventory
+         MYSQL_PASSWORD: 1001
+         MYSQL_DATABASE: inventory_service
+         MYSQL_ROOT_USERNAME: root
+         MYSQL_ROOT_PASSWORD: 1224
+       volumes:
+         - ./mysql-inventory:/var/lib/mysql
+
+       ports:
+         - "3306:3308"
+
+
+
+
+
+       restart: unless-stopped
+#    for mongo-service
+     product-mongo:
+         container_name: product-mongo
+         image: mongo
+         restart: unless-stopped
+         ports:
+           - "27017:27017"
+         expose:
+           - "27017"
+         volumes:
+           - ./mongo-product:/data/db
+
+#             mysql for keycloak
+     keycloak-mysql:
+         container_name: keycloak-mysql
+         image: "mysql:5.7"
+         restart: unless-stopped
+         environment:
+           MYSQL_USER: keycloak
+           MYSQL_PASSWORD: 100
+           MYSQL_ROOT_USERNAME: root
+           MYSQL_ROOT_PASSWORD: 1224
+         ports:
+           - "3306:3309"
+         expose:
+           - "3306"
+         volumes:
+          - ./keycloak-mysql:/var/lib/mysql
+
+#     for keycloak
+     keycloak:
+         container_name: keycloak
+         image: quay.io/keycloak/keycloak:23.0.6
+         command: ["start-dev", "--import-realm"]
+         environment:
+           DB_VENDOR: MYSQL
+           DB_ADDR: mysql
+           DB_DATABASE: keycloak
+           DB_USER: keycloak
+           DB_PASSWORD: password
+           KEYCLOAK_ADMIN: admin
+           KEYCLOAK_ADMIN_PASSWORD: password
+         ports:
+           - "8180:8180"
+         volumes:
+           - ./realms/:/opt/keycloak/data/import/
+         depends_on:
+           - keycloak-mysql
+#    FOR zookeeper
+     zookeeper:
+        image: confluentinc/cp-zookeeper:7.0.1
+        container_name: zookeeper
+        environment:
+          ZOOKEEPER_CLIENT_PORT: 2181
+          ZOOKEEPER_TICK_TIME: 2000
+#    for broker-kafka
+     broker:
+        image: confluentinc/cp-kafka:7.0.1
+        container_name: broker
+        ports:
+          - "9093:9093"
+        depends_on:
+          - zookeeper
+        expose:
+          - "9093"
+        environment:
+          KAFKA_BROKER_ID: 1
+          KAFKA_ZOOKEEPER_CONNECT: 'zookeeper:2181'
+          KAFKA_LISTNER_SECURITY_PROTOCAL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_INTERNAL:PLAINTEXT
+          KAFKA-ADVERTISED_LISTNERS: PLAINTEXT://localhost:9092,PLAINTEXT_INTERNAL://broker:29092
+          KAFKA_OFFSETS_TOPIC_REPLICATIONS_FACTOR: 1
+          KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+          KAFKA_TRANSACTION_STATE_LOG_REPLICATIONS_FACTOR: 1
+#       FOR DISCOVERY-SERVICE
+     discovery-server:
+       image: discovery-service:latest
+       container_name: discovery_server
+       ports:
+         - "8761:8761"
+       environment:
+         - SPRING-PROFILES-ACTIVE=docker
+       expose:
+        - "8761"
+#      for api gateway
+     apigateway:
+         image: api-gateway
+         container_name: apigateway
+         ports:
+           - "8079:8079"
+         environment:
+           - SPRING-PROFILES-ACTIVE=docker
+         expose:
+          - "8079"
+#       for producr-service
+     product-server:
+        image: product-service:latest
+        container_name: product-server
+        ports:
+          - "8081:8081"
+        environment:
+          - SPRING-PROFILES-ACTIVE=docker
+        depends_on:
+          - product-mongo
+          - discovery-server
+          - apigateway
+
+     order-server:
+       image: order-service:latest
+       container_name: order-server
+       ports:
+         - "8083:8083"
+       environment:
+         - SPRING-PROFILES-ACTIVE=docker
+         - SPRING-DATASOURCE_URL=jdbc:mysql://mysql-order:3406/New_Order_Service
+       depends_on:
+         - apigateway
+         - discovery-server
+         - mysql-order
+         - broker
+
+     inventory-server:
+       image: inventory-service:latest
+       container_name: inventory-server
+       ports:
+         - "8082:8082"
+       environment:
+         - SPRING-PROFILES-ACTIVE=docker
+         - SPRING-DATASOURCE_URL=jdbc:mysql://mysql-inventory:3407/inventory_service
+       depends_on:
+         - apigateway
+         - discovery-server
+         - mysql-inventory
+
+     notification-server:
+       image: notification-service:latest
+       container_name: notification-server
+       ports:
+         - "8084:8084"
+       environment:
+         - SPRING-PROFILES-ACTIVE=docker
+       depends_on:
+         - apigateway
+         - discovery-server
+         - broker
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
